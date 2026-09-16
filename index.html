@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>세븐포커 (7-Card Stud)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1b5e20;
+            color: white;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        #game-board {
+            width: 100%;
+            max-width: 1000px;
+            background: #2e7d32;
+            border: 8px solid #4e342e;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .player-area {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 10px 15px;
+            position: relative;
+        }
+
+        .player-area.active {
+            border: 2px solid #ffd54f;
+            background: rgba(255, 213, 79, 0.1);
+        }
+
+        .player-info {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 1.1em;
+        }
+
+        .cards-container {
+            display: flex;
+            gap: 8px;
+            min-height: 90px;
+            align-items: center;
+        }
+
+        .card {
+            width: 60px;
+            height: 85px;
+            background-color: white;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 5px;
+            box-sizing: border-box;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.4);
+            user-select: none;
+        }
+
+        .card.hidden {
+            background: linear-gradient(135deg, #b71c1c, #880e4f);
+            border: 2px solid #fff;
+        }
+
+        .card.hidden * {
+            display: none;
+        }
+
+        .card.red { color: #d32f2f; }
+        .card.black { color: #212121; }
+
+        .card-suit { font-size: 18px; line-height: 1; }
+        .card-value { align-self: flex-end; font-size: 14px; }
+
+        #controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            width: 100%;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+            background: #ffa726;
+            color: #000;
+            box-shadow: 0 4px #fb8c00;
+        }
+
+        button:hover { background: #ffb74d; }
+        button:active { transform: translateY(2px); box-shadow: 0 2px #fb8c00; }
+        button:disabled { background: #78909c; box-shadow: none; cursor: not-allowed; color: #b0bec5; }
+
+        #pot-info {
+            font-size: 1.3em;
+            text-align: center;
+            font-weight: bold;
+            color: #ffd54f;
+            margin: 5px 0;
+        }
+
+        #message-log {
+            width: 100%;
+            max-width: 1000px;
+            height: 100px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 8px;
+            margin-top: 15px;
+            padding: 10px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            font-size: 0.9em;
+            color: #ddd;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>7-Card Stud Poker</h1>
+    <div id="pot-info">판돈(Pot): $0</div>
+
+    <div id="game-board">
+        <!-- AI 1 -->
+        <div class="player-area" id="p1">
+            <div class="player-info">
+                <span>AI 1</span>
+                <span class="chips">칩: $1000</span>
+                <span class="status"></span>
+            </div>
+            <div class="cards-container"></div>
+        </div>
+        <!-- AI 2 -->
+        <div class="player-area" id="p2">
+            <div class="player-info">
+                <span>AI 2</span>
+                <span class="chips">칩: $1000</span>
+                <span class="status"></span>
+            </div>
+            <div class="cards-container"></div>
+        </div>
+        <!-- AI 3 -->
+        <div class="player-area" id="p3">
+            <div class="player-info">
+                <span>AI 3</span>
+                <span class="chips">칩: $1000</span>
+                <span class="status"></span>
+            </div>
+            <div class="cards-container"></div>
+        </div>
+        <!-- Player -->
+        <div class="player-area" id="p0">
+            <div class="player-info">
+                <span style="color: #ffd54f;">나 (Player)</span>
+                <span class="chips">칩: $1000</span>
+                <span class="status"></span>
+            </div>
+            <div class="cards-container"></div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="btn-start" onclick="startGame()">게임 시작</button>
+        <button id="btn-call" onclick="playerAction('call')" disabled>콜 (Call)</button>
+        <button id="btn-raise" onclick="playerAction('raise')" disabled>레이즈 (+$50)</button>
+        <button id="btn-fold" onclick="playerAction('fold')" disabled>다이 (Fold)</button>
+    </div>
+
+    <div id="message-log"></div>
+
+    <script>
+        const SUITS = ['♠', '◆', '♥', '♣'];
+        const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        
+        let deck = [];
+        let players = [];
+        let pot = 0;
+        let currentBet = 0;
+        let round = 0; // 0: 시작전, 3~7: 스트리트 라운드
+        let activePlayerIdx = 0;
+        let gameActive = false;
+
+        class Player {
+            constructor(name, isAi, id) {
+                this.name = name;
+                this.isAi = isAi;
+                this.id = id;
+                this.chips = 1000;
+                this.cards = [];
+                this.folded = false;
+                this.currentBet = 0;
+            }
+
+            reset() {
+                this.cards = [];
+                this.folded = false;
+                this.currentBet = 0;
+            }
+        }
+
+        // 초기 플레이어 생성
+        players.push(new Player("나", false, 0));
+        players.push(new Player("AI 1", true, 1));
+        players.push(new Player("AI 2", true, 2));
+        players.push(new Player("AI 3", true, 3));
+
+        function log(msg) {
+            const logBox = document.getElementById('message-log');
+            logBox.innerHTML += `<div>${msg}</div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function createDeck() {
+            deck = [];
+            for (let suit of SUITS) {
+                for (let v = 0; v < VALUES.length; v++) {
+                    deck.push({ suit, value: VALUES[v], rank: v });
+                }
+            }
+            // 셔플
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('pot-info').innerText = `판돈(Pot): $${pot}`;
+            
+            players.forEach((p, idx) => {
+                const el = document.getElementById(`p${idx}`);
+                el.querySelector('.chips').innerText = `칩: $${p.chips}`;
+                
+                let statusText = p.folded ? "FOLD" : (p.currentBet > 0 ? `베팅: $${p.currentBet}` : "");
+                el.querySelector('.status').innerText = statusText;
+
+                const cardsCont = el.querySelector('.cards-container');
+                cardsCont.innerHTML = '';
+
+                p.cards.forEach((card, cIdx) => {
+                    const cardDiv = document.createElement('div');
+                    cardDiv.className = 'card';
+                    
+                    // 1, 2번째 카드와 7번째 카드는 AI일 때 비공개
+                    const isHidden = p.isAi && (cIdx < 2 || cIdx === 6) && gameActive;
+
+                    if (isHidden) {
+                        cardDiv.classList.add('hidden');
+                    } else {
+                        const isRed = card.suit === '♥' || card.suit === '◆';
+                        cardDiv.classList.add(isRed ? 'red' : 'black');
+                        cardDiv.innerHTML = `
+                            <div class="card-suit">${card.suit}</div>
+                            <div class="card-value">${card.value}</div>
+                        `;
+                    }
+                    cardsCont.appendChild(cardDiv);
+                });
+            });
+        }
+
+        function startGame() {
+            document.getElementById('message-log').innerHTML = '';
+            log("<b>새 게임을 시작합니다! (앤티: $10)</b>");
+            
+            pot = 0;
+            currentBet = 0;
+            round = 3; // 3장부터 시작
+            createDeck();
+
+            players.forEach(p => {
+                p.reset();
+                p.chips -= 10;
+                pot += 10;
+            });
+
+            // 처음 3장 돌리기 (비공개 2장 + 공개 1장)
+            for (let i = 0; i < 3; i++) {
+                players.forEach(p => p.cards.push(deck.pop()));
+            }
+
+            gameActive = true;
+            document.getElementById('btn-start').disabled = true;
+            updateUI();
+            startBettingRound();
+        }
+
+        function startBettingRound() {
+            currentBet = 0;
+            players.forEach(p => p.currentBet = 0);
+            
+            log(`--- [ ${round}번째 카드 라운드 베팅 ] ---`);
+            activePlayerIdx = 0;
+            processTurn();
+        }
+
+        function processTurn() {
+            updateUI();
+
+            // 생존한 플레이어 확인
+            const activePlayers = players.filter(p => !p.folded);
+            if (activePlayers.length === 1) {
+                endGame(activePlayers[0]);
+                return;
+            }
+
+            // 이번 라운드 모두의 베팅이 끝났는지 확인
+            if (activePlayerIdx >= players.length) {
+                nextRound();
+                return;
+            }
+
+            const p = players[activePlayerIdx];
+            if (p.folded) {
+                activePlayerIdx++;
+                processTurn();
+                return;
+            }
+
+            if (p.isAi) {
+                setTimeout(() => aiAction(p), 800);
+            } else {
+                // 플레이어 차례
+                enableControls(true);
+            }
+        }
+
+        function enableControls(enable) {
+            document.getElementById('btn-call').disabled = !enable;
+            document.getElementById('btn-raise').disabled = !enable;
+            document.getElementById('btn-fold').disabled = !enable;
+        }
+
+        function playerAction(action) {
+            enableControls(false);
+            const p = players[0];
+
+            if (action === 'fold') {
+                p.folded = true;
+                log(`${p.name}: 다이 (Fold)`);
+            } else if (action === 'call') {
+                const diff = currentBet - p.currentBet;
+                p.chips -= diff;
+                pot += diff;
+                p.currentBet = currentBet;
+                log(`${p.name}: 콜 ($${diff})`);
+            } else if (action === 'raise') {
+                const raiseAmt = 50;
+                const diff = (currentBet + raiseAmt) - p.currentBet;
+                currentBet += raiseAmt;
+                p.chips -= diff;
+                pot += diff;
+                p.currentBet = currentBet;
+                log(`${p.name}: 레이즈 (총 $${currentBet})`);
+            }
+
+            activePlayerIdx++;
+            processTurn();
+        }
+
+        function aiAction(p) {
+            // 간단한 AI 로직
+            const rand = Math.random();
+            const diff = currentBet - p.currentBet;
+
+            if (diff > p.chips) {
+                p.folded = true;
+                log(`${p.name}: 다이 (Fold)`);
+            } else if (rand < 0.15 && currentBet > 0) {
+                p.folded = true;
+                log(`${p.name}: 다이 (Fold)`);
+            } else if (rand > 0.85 && p.chips >= diff + 50) {
+                const raiseAmt = 50;
+                currentBet += raiseAmt;
+                const pay = currentBet - p.currentBet;
+                p.chips -= pay;
+                pot += pay;
+                p.currentBet = currentBet;
+                log(`${p.name}: 레이즈 (총 $${currentBet})`);
+            } else {
+                p.chips -= diff;
+                pot += diff;
+                p.currentBet = currentBet;
+                log(`${p.name}: 콜 ($${diff})`);
+            }
+
+            activePlayerIdx++;
+            processTurn();
+        }
+
+        function nextRound() {
+            round++;
+            if (round <= 7) {
+                log(`<b>${round}번째 카드가 배분됩니다.</b>`);
+                players.forEach(p => {
+                    if (!p.folded) p.cards.push(deck.pop());
+                });
+                startBettingRound();
+            } else {
+                // 게임 종료 & 쇼다운
+                gameActive = false;
+                updateUI();
+                evaluateShowdown();
+            }
+        }
+
+        // 족보 계산 로직 (간이 판정 엔진)
+        function evaluateHand(cards) {
+            // 7장 중 최선의 5장 족보를 계산하기 위한 간단 랭킹 함수
+            // 실제 구현 편의를 위해 최고 카드 라벨 및 기본 점수 부여
+            let ranks = cards.map(c => c.rank).sort((a,b) => b-a);
+            let suits = cards.map(c => c.suit);
+            
+            let counts = {};
+            ranks.forEach(r => counts[r] = (counts[r] || 0) + 1);
+            let countValues = Object.values(counts).sort((a,b) => b-a);
+
+            // 플러시 체크
+            let suitCounts = {};
+            suits.forEach(s => suitCounts[s] = (suitCounts[s] || 0) + 1);
+            let hasFlush = Object.values(suitCounts).some(c => c >= 5);
+
+            let score = 0;
+            let handName = "하이 카라";
+
+            if (hasFlush) {
+                score = 500; handName = "플러시 (Flush)";
+            } else if (countValues[0] === 4) {
+                score = 700; handName = "포카드 (Four Cards)";
+            } else if (countValues[0] === 3 && countValues[1] >= 2) {
+                score = 600; handName = "풀하우스 (Full House)";
+            } else if (countValues[0] === 3) {
+                score = 300; handName = "트리플 (Three of a Kind)";
+            } else if (countValues[0] === 2 && countValues[1] === 2) {
+                score = 200; handName = "투 페어 (Two Pair)";
+            } else if (countValues[0] === 2) {
+                score = 100; handName = "원 페어 (One Pair)";
+            } else {
+                score = ranks[0]; handName = `하이 카드 (${VALUES[ranks[0]]})`;
+            }
+
+            return { score: score + ranks[0], handName };
+        }
+
+        function evaluateShowdown() {
+            log("<b>[ 쇼다운 - 패 공개 ]</b>");
+            let winners = [];
+            let maxScore = -1;
+
+            players.forEach(p => {
+                if (!p.folded) {
+                    let result = evaluateHand(p.cards);
+                    log(`${p.name}의 족보: <b>${result.handName}</b>`);
+                    if (result.score > maxScore) {
+                        maxScore = result.score;
+                        winners = [p];
+                    } else if (result.score === maxScore) {
+                        winners.push(p);
+                    }
+                }
+            });
+
+            const winPrize = Math.floor(pot / winners.length);
+            winners.forEach(w => {
+                w.chips += winPrize;
+                log(`🏆 <b>${w.name}</b> 님이 승리하여 $${winPrize}를 획득했습니다!`);
+            });
+
+            document.getElementById('btn-start').disabled = false;
+            updateUI();
+        }
+    </script>
+</body>
+</html>
